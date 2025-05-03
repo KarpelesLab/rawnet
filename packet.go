@@ -6,33 +6,51 @@ import (
 	"net"
 )
 
-// packet per layer
-// simple methods with low processing useful for various operations
+// Package rawnet provides utilities for working with network packets at various layers.
+// These utilities make certain assumptions to optimize performance while providing
+// a simple API for packet manipulation.
 
 // Layer2 means packet starts with ethernet header (14 bytes, 18 if 802.1Q tag)
 // Layer3 means packet starts at IP level
 
-// The functions below will make various assumptions in order to make reading of data faster
-
+// L2Packet represents a Layer 2 network packet (Ethernet frame).
+// It's a byte slice that starts with an Ethernet header and provides methods
+// for easily accessing and manipulating Ethernet header fields.
 type L2Packet []byte
+
+// L3Packet represents a Layer 3 network packet (IP packet).
+// It's a byte slice that starts with an IP header and provides methods
+// for easily accessing and manipulating IP header fields.
 type L3Packet []byte
 
+// Packet is an interface for any network packet type.
+// It provides a method to determine the OSI layer at which this packet operates.
 type Packet interface {
+	// GetPacketLayer returns the OSI model layer number that this packet operates at.
+	// For example, Ethernet is layer 2, IP is layer 3, TCP is layer 4.
 	GetPacketLayer() int
 }
 
+// GetPacketLayer implements the Packet interface for L2Packet.
+// Always returns 2 as Ethernet operates at OSI layer 2 (data link layer).
 func (p L2Packet) GetPacketLayer() int {
 	return 2
 }
 
+// GetDestinationMac returns the destination MAC address from the Ethernet header.
+// This is the first 6 bytes of the frame.
 func (p L2Packet) GetDestinationMac() net.HardwareAddr {
 	return net.HardwareAddr(p[0:6])
 }
 
+// GetSourceMac returns the source MAC address from the Ethernet header.
+// This is bytes 6-12 of the frame.
 func (p L2Packet) GetSourceMac() net.HardwareAddr {
 	return net.HardwareAddr(p[6:12])
 }
 
+// GetEthertype returns the EtherType value from the Ethernet header.
+// This indicates the protocol of the encapsulated data.
 func (p L2Packet) GetEthertype() Protocol {
 	res := Protocol(uint16(p[12])<<8 | uint16(p[13]))
 	//if res == ProtoVLAN {
@@ -42,6 +60,8 @@ func (p L2Packet) GetEthertype() Protocol {
 	return res
 }
 
+// GetVLan extracts the VLAN ID from the frame if it has 802.1Q tagging.
+// Returns 0 if there is no VLAN tag.
 func (p L2Packet) GetVLan() uint16 {
 	ethertype := Protocol(uint16(p[12])<<8 | uint16(p[13]))
 	if ethertype != ProtoVLAN {
@@ -50,6 +70,9 @@ func (p L2Packet) GetVLan() uint16 {
 	return uint16(p[14])<<8 | uint16(p[15])
 }
 
+// GetL3Packet extracts the Layer 3 packet from this Ethernet frame.
+// It returns the EtherType, VLAN ID (if present), and the Layer 3 packet data.
+// For VLAN-tagged frames, it properly skips the 802.1Q header.
 func (p L2Packet) GetL3Packet() (Protocol, uint16, L3Packet) {
 	ethertype := Protocol(uint16(p[12])<<8 | uint16(p[13]))
 	if ethertype == ProtoVLAN {
@@ -61,10 +84,16 @@ func (p L2Packet) GetL3Packet() (Protocol, uint16, L3Packet) {
 	return ethertype, 0, L3Packet(p[14:])
 }
 
+// GetPacketLayer implements the Packet interface for L3Packet.
+// Always returns 3 as IP operates at OSI layer 3 (network layer).
 func (p L3Packet) GetPacketLayer() int {
 	return 3
 }
 
+// GetSrcDst extracts both source and destination addresses (IP and ports) into provided buffers.
+// For IPv4, src/dst buffers should be at least 6 bytes (4 for IP, 2 for port).
+// For IPv6, src/dst buffers should be at least 18 bytes (16 for IP, 2 for port).
+// Returns the protocol type (TCP, UDP, etc.) if available.
 func (p L3Packet) GetSrcDst(src, dst []byte) Protocol {
 	// get source & destination of packet. src/dst len must be 6 bytes in ipv4, 18 bytes in ipv6
 	switch (p[0] >> 4) & 0xf {
@@ -96,6 +125,9 @@ func (p L3Packet) GetSrcDst(src, dst []byte) Protocol {
 	return 0
 }
 
+// WithNewSource creates a copy of the packet with a new source IP address and port.
+// It properly handles both IPv4 and IPv6 packets and recalculates checksums.
+// Returns nil if the operation is not supported for the given protocol or IP version.
 func (p L3Packet) WithNewSource(src net.IP, port uint16) L3Packet {
 	// duplicate packet
 	p2 := make([]byte, len(p))
@@ -136,6 +168,9 @@ func (p L3Packet) WithNewSource(src net.IP, port uint16) L3Packet {
 	return nil
 }
 
+// WithNewDst creates a copy of the packet with a new destination IP address and port.
+// It properly handles both IPv4 and IPv6 packets and recalculates checksums.
+// Returns nil if the operation is not supported for the given protocol or IP version.
 func (p L3Packet) WithNewDst(dst net.IP, port uint16) L3Packet {
 	// duplicate packet
 	p2 := make([]byte, len(p))
@@ -177,6 +212,9 @@ func (p L3Packet) WithNewDst(dst net.IP, port uint16) L3Packet {
 }
 
 // GetNatInfo returns information about source & dest without performing any memory copy
+// GetNatInfo returns information about source & destination addresses without performing any memory copy.
+// This is useful for NAT implementations that need to access and potentially modify this information.
+// The first return value contains IP address information, and the second contains protocol-specific information.
 func (p L3Packet) GetNatInfo() ([]byte, []byte) {
 	switch (p[0] >> 4) & 0xf {
 	case 4: // ipv4 → p[12:20] (src, dst)
@@ -203,6 +241,8 @@ func (p L3Packet) GetNatInfo() ([]byte, []byte) {
 	return nil, nil
 }
 
+// GetSourceIP returns the source IP address from the packet.
+// Works with both IPv4 and IPv6 packets, returning the appropriate net.IP type.
 func (p L3Packet) GetSourceIP() net.IP {
 	ip_type := (p[0] >> 4) & 0xf
 
@@ -216,6 +256,8 @@ func (p L3Packet) GetSourceIP() net.IP {
 	}
 }
 
+// GetDestinationIP returns the destination IP address from the packet.
+// Works with both IPv4 and IPv6 packets, returning the appropriate net.IP type.
 func (p L3Packet) GetDestinationIP() net.IP {
 	ip_type := (p[0] >> 4) & 0xf
 
@@ -229,6 +271,8 @@ func (p L3Packet) GetDestinationIP() net.IP {
 	}
 }
 
+// GetEthertype returns the protocol identifier for this IP packet.
+// Returns ProtoIPv4 or ProtoIPv6 based on the IP version in the packet.
 func (p L3Packet) GetEthertype() Protocol {
 	ip_type := (p[0] >> 4) & 0xf
 
@@ -238,10 +282,13 @@ func (p L3Packet) GetEthertype() Protocol {
 	case 6:
 		return ProtoIPv6
 	default:
-		return 0 // ???
+		return 0 // Unknown protocol
 	}
 }
 
+// GetProtocol returns the Layer 4 protocol identifier from the IP header.
+// For IPv4, this is the Protocol field (byte 9).
+// For IPv6, this is the Next Header field (byte 6).
 func (p L3Packet) GetProtocol() L4Proto {
 	ip_type := (p[0] >> 4) & 0xf
 
@@ -251,10 +298,13 @@ func (p L3Packet) GetProtocol() L4Proto {
 	case 6:
 		return L4Proto(p[6])
 	default:
-		return 0 // ???
+		return 0 // Unknown protocol
 	}
 }
 
+// GetSourcePort extracts the source port from TCP or UDP packets.
+// Returns 0 if the packet is not TCP or UDP, or if the IP version is unknown.
+// Works with both IPv4 and IPv6 packets by correctly calculating header sizes.
 func (p L3Packet) GetSourcePort() uint16 {
 	// read source port from tcp/udp frame, returns zero in case of error
 	ip_type := (p[0] >> 4) & 0xf
@@ -285,18 +335,26 @@ func (p L3Packet) GetSourcePort() uint16 {
 	return uint16(p[ip_header_size])<<8 | uint16(p[ip_header_size+1])
 }
 
+// MarshalBinary implements the encoding.BinaryMarshaler interface.
+// For L3Packet, this simply returns the packet data as a byte slice.
 func (p L3Packet) MarshalBinary() ([]byte, error) {
 	return p, nil
 }
 
+// encode implements the Frame interface.
+// For L3Packet, this appends the packet data to the provided byte slice.
 func (p L3Packet) encode(b []byte) ([]byte, error) {
 	return append(b, p...), nil
 }
 
+// String returns a human-readable representation of the packet,
+// showing the protocol, source IP, and destination IP.
 func (p L3Packet) String() string {
 	return fmt.Sprintf("L3 Packet proto=%s %s => %s", p.GetProtocol(), p.GetSourceIP(), p.GetDestinationIP())
 }
 
+// Dup creates a deep copy of the packet.
+// This is useful when you need to modify a packet without affecting the original.
 func (p L3Packet) Dup() L3Packet {
 	p2 := make([]byte, len(p))
 	copy(p2, p)

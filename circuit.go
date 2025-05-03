@@ -5,8 +5,9 @@ import (
 	"sync"
 )
 
-// Circuit is a L2 network that can accept multiple clients either L2 or L3.
-// L3 clients will be assigned a random MAC address.
+// VirtualCircuit implements a Layer 2 network that can accept multiple clients (L2 or L3).
+// It acts as a virtual switch or hub, broadcasting packets to all connected devices.
+// L3 clients will be assigned a random MAC address when connected.
 type VirtualCircuit struct {
 	peers   map[L2Device]L2Device
 	peersLk sync.RWMutex
@@ -16,6 +17,8 @@ type VirtualCircuit struct {
 	// TODO: add mac table
 }
 
+// NewCircuit creates a new VirtualCircuit instance.
+// This circuit can have multiple L2 devices attached to it via BridgeDevice.
 func NewCircuit() *VirtualCircuit {
 	circ := &VirtualCircuit{
 		peers: make(map[L2Device]L2Device),
@@ -24,10 +27,15 @@ func NewCircuit() *VirtualCircuit {
 	return circ
 }
 
+// SetDebug enables or disables debug logging for this circuit.
+// When enabled, the circuit will log information about packet handling.
 func (c *VirtualCircuit) SetDebug(v bool) {
 	c.debug = v
 }
 
+// HandleL2Packet implements the L2Device interface.
+// It broadcasts the received packet to all connected devices except the source.
+// For circuits with more than 16 devices, it uses goroutines for parallel delivery.
 func (c *VirtualCircuit) HandleL2Packet(src L2Device, pkt L2Packet) error {
 	// handle packet. Everything broadcast!
 	// TODO: check pkt source ethernet address and source device, and if directly connected store in mac table for unicast processing
@@ -72,6 +80,9 @@ func (c *VirtualCircuit) HandleL2Packet(src L2Device, pkt L2Packet) error {
 	return nil
 }
 
+// BridgeDevice connects a Layer 2 device to this circuit.
+// All packets received by the circuit will be forwarded to this device,
+// and all packets sent by this device will be broadcast to other devices.
 func (c *VirtualCircuit) BridgeDevice(dev L2Device) error {
 	c.peersLk.Lock()
 	defer c.peersLk.Unlock()
