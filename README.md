@@ -1,3 +1,5 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/KarpelesLab/rawnet.svg)](https://pkg.go.dev/github.com/KarpelesLab/rawnet)
+
 # RawNet
 
 RawNet is a Go library for low-level network packet manipulation. It provides tools for parsing, inspecting, and creating raw network packets at layers 2, 3, and 4 of the OSI model.
