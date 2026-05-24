@@ -8,6 +8,10 @@ import (
 // VirtualCircuit implements a Layer 2 network that can accept multiple clients (L2 or L3).
 // It acts as a virtual switch or hub, broadcasting packets to all connected devices.
 // L3 clients will be assigned a random MAC address when connected.
+//
+// Deprecated: use pktkit.L2Hub from github.com/KarpelesLab/pktkit instead.
+// pktkit.L2Hub learns source MACs and forwards unicast frames to the correct
+// port rather than flooding every frame.
 type VirtualCircuit struct {
 	peers   map[L2Device]L2Device
 	peersLk sync.RWMutex
@@ -19,6 +23,10 @@ type VirtualCircuit struct {
 
 // NewCircuit creates a new VirtualCircuit instance.
 // This circuit can have multiple L2 devices attached to it via BridgeDevice.
+//
+// Deprecated: use pktkit.NewL2Hub from github.com/KarpelesLab/pktkit instead,
+// which provides MAC learning and is the supported replacement for
+// VirtualCircuit.
 func NewCircuit() *VirtualCircuit {
 	circ := &VirtualCircuit{
 		peers: make(map[L2Device]L2Device),

@@ -16,15 +16,24 @@ import (
 // L2Packet represents a Layer 2 network packet (Ethernet frame).
 // It's a byte slice that starts with an Ethernet header and provides methods
 // for easily accessing and manipulating Ethernet header fields.
+//
+// Deprecated: use pktkit.Frame from github.com/KarpelesLab/pktkit, a
+// zero-copy []byte alias with typed header accessors.
 type L2Packet []byte
 
 // L3Packet represents a Layer 3 network packet (IP packet).
 // It's a byte slice that starts with an IP header and provides methods
 // for easily accessing and manipulating IP header fields.
+//
+// Deprecated: use pktkit.Packet from github.com/KarpelesLab/pktkit, a
+// zero-copy []byte alias with typed IPv4 and IPv6 header accessors.
 type L3Packet []byte
 
 // Packet is an interface for any network packet type.
 // It provides a method to determine the OSI layer at which this packet operates.
+//
+// Deprecated: use pktkit.Frame or pktkit.Packet from
+// github.com/KarpelesLab/pktkit instead.
 type Packet interface {
 	// GetPacketLayer returns the OSI model layer number that this packet operates at.
 	// For example, Ethernet is layer 2, IP is layer 3, TCP is layer 4.
